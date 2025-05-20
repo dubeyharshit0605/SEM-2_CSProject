@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Repository Details</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-image: url("bg/image.png");
+      overflow-x: hidden;
+    }
+
+    h1 {
+      color: #ffffff;
+      display: inline-block;
+      margin-right: 20px;
+    }
+
+    #repo-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    #download-btn {
+      padding: 10px 20px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+    }
+
+    #download-btn:hover {
+      background-color: #218838;
+    }
+
+    #file-container {
+      margin-top: 20px;
+    }
+
+    .file-item {
+      padding: 8px 15px;
+      margin: 5px;
+      color: white;
+      background-color: #212121;
+      border: 1px solid #ddd;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 14px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease;
+    }
+
+    .file-item:hover {
+      background-color: #dbd6d6;
+      color: black;
+    }
+
+    .file-item.directory {
+      font-weight: bold;
+    }
+
+    .file-item .file-list {
+      margin-left: 20px;
+      display: none;
+    }
+
+    #file-content {
+      margin-top: 20px;
+      color: white;
+      background-color: #212121;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      white-space: pre-wrap;
+    }
+
+    #file-content .file-content-wrapper {
+      background-color: #746f6f;
+      padding: 15px;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+    }
+
+    #file-content img {
+      max-width: 100%;
+      max-height: 400px;
+      display: block;
+      margin: 10px 0;
+    }
+
+    #file-content iframe {
+      width: 100%;
+      height: 500px;
+      border: none;
+      margin-top: 10px;
+    }
+
+    pre {
+      text-wrap: wrap;
+    }
+  </style>
+  <script>
+    function getQueryParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        owner: params.get("owner"),
+        repo: params.get("repo"),
+      };
+    }
+
+    async function fetchRepoStructure(owner, repo, path = '') {
+      try {
+        const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`);
+        return response.data;
+      }
+      catch (error) {
+        console.error("Error fetching repo content:", error);
+      }
+    }
+
+    async function fetchRepoDetails(owner, repo) {
+      try {
+        const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}`);
+        return response.data;
+      } catch (error) {
+        console.error("Error fetching repo details:", error);
+      }
+    }
+
+    async function renderRepoContent(files, parentElement) {
+      parentElement.innerHTML = ''; 
+      files.forEach(file => {
+        const fileItem = document.createElement("div");
+        fileItem.classList.add("file-item");
+        fileItem.textContent = file.name;
+
+        if (file.type === "dir") {
+          fileItem.classList.add("directory");
+          const fileList = document.createElement("div");
+          fileList.classList.add("file-list");
+
+          fileItem.addEventListener("click", async () => {
+            if (fileList.style.display === "none" || fileList.style.display === "") {
+              const directoryContents = await fetchRepoStructure(getQueryParams().owner, getQueryParams().repo, file.path);
+              renderRepoContent(directoryContents, fileList); 
+              fileList.style.display = "block"; 
+            } 
+            else {
+              fileList.style.display = "none"; 
+            }
+          });
+
+          fileItem.appendChild(fileList);
+        }
+        else {
+          fileItem.classList.remove("directory");  
+          fileItem.addEventListener("click", async () => {
+            const fileContent = await fetchFileContent(getQueryParams().owner, getQueryParams().repo, file.path);
+            displayFileContent(fileContent, file.name, file);
+          });
+        }
+
+        parentElement.appendChild(fileItem);
+      });
+    }
+
+    async function fetchFileContent(owner, repo, filePath) {
+      try {
+        const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`);
+        const content = atob(response.data.content); 
+        return { content, filePath, fileType: response.data.name.split('.').pop() };
+      } 
+      catch (error) {
+        console.error("Error fetching file content:", error);
+      }
+    }
+
+    function displayFileContent(fileData, fileName, file) {
+      const fileContentContainer = document.getElementById("file-content");
+      fileContentContainer.innerHTML = `<h2>Contents of ${fileName}</h2>`;
+
+      if (fileData.fileType === "md" || fileData.fileType === "txt") {
+        fileContentContainer.innerHTML += `<div class="file-content-wrapper"><pre>${fileData.content}</pre></div>`;
+      } else if (fileData.fileType === "html") {
+        fileContentContainer.innerHTML += `<iframe srcdoc="${fileData.content}"></iframe>`;
+      } else if (["jpg", "jpeg", "png", "gif"].includes(fileData.fileType)) {
+        fileContentContainer.innerHTML += `<img src="https://raw.githubusercontent.com/${getQueryParams().owner}/${getQueryParams().repo}/main/${file.path}" alt="${fileName}" />`;
+      } 
+      else {
+        fileContentContainer.innerHTML += `<div class="file-content-wrapper"><pre>${fileData.content}</pre></div>`;
+      }
+
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+
+    async function loadRepoPage() {
+      const { owner, repo } = getQueryParams();
+      if (owner && repo) {
+        const repoDetails = await fetchRepoDetails(owner, repo);
+        
+        const repoHeader = document.querySelector('h1');
+        repoHeader.innerHTML = `<a href="https://github.com/${owner}/${repo}" target="_blank" style="color: white; text-decoration: none;">${repoDetails.name}</a>`;
+        
+        const repoFiles = await fetchRepoStructure(owner, repo);
+        renderRepoContent(repoFiles, document.getElementById("file-container"));
+      } else {
+        alert("Invalid repo information!");
+      }
+    }
+
+    window.onload = loadRepoPage;
+  </script>
+</head>
+<body>
+  <div id="repo-header">
+    <h1>Repository File Structure</h1>
+    <button id="download-btn" onclick="downloadRepo()">Download ZIP</button>
+  </div>
+
+  <div id="file-container"></div>
+  <div id="file-content"></div>
+
+  <script>
+    function downloadRepo() {
+      const { owner, repo } = getQueryParams();
+      if (owner && repo) {
+        const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/main.zip`;
+        window.location.href = zipUrl; 
+      }
+    }
+  </script>
+</body>
+</html>
